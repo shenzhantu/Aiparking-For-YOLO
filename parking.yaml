@@ -1,0 +1,9 @@
+# YOLOv8 数据集配置
+path: ./dataset
+train: images/train
+val: images/val
+
+# 类别
+names:
+  0: Parking
+  1: barrier

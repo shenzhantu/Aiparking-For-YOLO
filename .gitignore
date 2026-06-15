@@ -1,0 +1,29 @@
+﻿# ===== 大数据文件（不提交） =====
+
+# 标注工作区（原始图片 + X-AnyLabeling JSON）
+images/
+images（1）/
+images（2）/
+images（3）/
+images（4）/
+
+# 训练数据集（图片 + 标签 + COCO JSON）
+dataset/
+
+# 训练输出（日志、图表、模型权重）
+runs/
+log/
+
+# 模型权重文件
+weights/
+models/
+*.pt
+*.onnx
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 系统文件
+.DS_Store
+Thumbs.db
