@@ -1,7 +1,36 @@
-# Python 缓存
+# Python cache
 __pycache__/
 *.pyc
 
-# 系统文件
+# System files
 .DS_Store
 Thumbs.db
+
+# Local image and dataset folders should stay outside Git.
+images/
+images*/
+dataset/
+dataset*/
+D:/Aiparking/image backcup/
+
+# Ultralytics outputs and generated caches stay outside Git.
+*.cache
+runs/
+
+# Model weights / exports should be published as release assets, not committed.
+*.pt
+*.pth
+*.onnx
+*.engine
+*.om
+weights/
+models/*.pt
+models/*.onnx
+
+# Keep Markdown logs in GitHub, ignore raw runtime logs and state files.
+log/*.log
+log/*.done
+log/*.json
+log/*stdout*
+log/*stderr*
+!log/*.md

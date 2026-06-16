@@ -1,217 +1,181 @@
 """
-用训练好的 YOLO11-seg 模型自动标注图片，导出为 X-AnyLabeling 兼容的 JSON 格式
-支持多边形分割标注（而非矩形框）
+Auto-label images with a trained YOLO segmentation model and export X-AnyLabeling JSON.
 
-用法:
-  python predict.py                           # 使用默认模型和阈值 0.25
-  python predict.py --conf 0.3                # 调整置信度阈值
-  python predict.py --overwrite               # 覆盖已有标注（包括手动标注）
-  python predict.py --model path/to/best.pt   # 指定模型
+Defaults target the current YOLOv8 iteration:
+  model:  D:\\Aiparking\\Aiparking For YOLO\\runs\\parking_yolov8_seg\\weights\\best.pt
+  target: D:\\Aiparking\\image backcup\\images（5）
 """
 
-import json
-import os
-import glob
+from __future__ import annotations
+
 import argparse
-import numpy as np
+import glob
+import json
+from pathlib import Path
+
 import torch
 from ultralytics import YOLO
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_MODEL = os.path.join(BASE_DIR, "runs", "parking_seg", "weights", "best.pt")
-TARGET_DIR = os.path.join(BASE_DIR, "images")
-CONF_THRESHOLD = 0.25  # 降低默认阈值，提高召回率
+
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_MODEL = BASE_DIR / "runs" / "parking_yolov8_seg" / "weights" / "best.pt"
+DEFAULT_TARGET = Path(r"D:\Aiparking\image backcup\images（5）")
+DEFAULT_CONFIDENCE = 0.4
 CLASS_NAMES = {0: "Parking", 1: "barrier"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp"}
 
 
-def masks_to_polygons(result):
-    """
-    从 YOLO segmentation 结果中提取多边形顶点。
-    优先使用 result.masks（分割 mask），如果不可用则回退到 result.boxes（矩形框）。
-    返回: list of dict, 每个包含 polygon_points, confidence, class_id
-    """
-    detections = []
-
+def masks_to_shapes(result) -> list[dict]:
+    detections: list[dict] = []
     if result.masks is not None and result.masks.xy is not None:
-        # 使用分割 mask 的多边形顶点
-        for i, polygon in enumerate(result.masks.xy):
-            # polygon 是 Nx2 的 numpy 数组，已经是原始图片坐标
+        for index, polygon in enumerate(result.masks.xy):
             points = polygon.tolist()
-            # 确保至少有3个点（多边形最少需要3个顶点）
             if len(points) < 3:
                 continue
-            conf = float(result.boxes.conf[i])
-            cls_id = int(result.boxes.cls[i])
-            detections.append({
-                "points": points,
-                "confidence": conf,
-                "class_id": cls_id,
-            })
+            detections.append(
+                {
+                    "points": points,
+                    "confidence": float(result.boxes.conf[index]),
+                    "class_id": int(result.boxes.cls[index]),
+                }
+            )
     elif result.boxes is not None:
-        # 回退：使用矩形框（转为4点多边形）
         for box in result.boxes:
-            xyxy = box.xyxy[0].cpu().numpy().tolist()
-            x1, y1, x2, y2 = xyxy
-            points = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            detections.append({
-                "points": points,
-                "confidence": conf,
-                "class_id": cls_id,
-            })
-
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().tolist()
+            detections.append(
+                {
+                    "points": [[x1, y1], [x2, y1], [x2, y2], [x1, y2]],
+                    "confidence": float(box.conf[0]),
+                    "class_id": int(box.cls[0]),
+                }
+            )
     return detections
 
 
-def create_labelme_json(image_path, detections, img_w, img_h):
-    """创建 X-AnyLabeling 兼容的 JSON（多边形分割格式）"""
-    shapes = []
-    for det in detections:
-        label = CLASS_NAMES.get(det["class_id"], f"class_{det['class_id']}")
-        # barrier 用 rectangle，Parking 用 polygon
-        if label == "barrier":
-            pts = det["points"]
-            if len(pts) == 4:
-                shape_type = "rectangle"
-                # rectangle 格式: [左上角, 右下角]
-                xs = [p[0] for p in pts]
-                ys = [p[1] for p in pts]
-                points = [[min(xs), min(ys)], [max(xs), max(ys)]]
-            else:
-                shape_type = "polygon"
-                points = pts
-        else:
-            shape_type = "polygon"
-            points = det["points"]
-        shapes.append({
-            "label": label,
-            "score": det["confidence"],
-            "points": points,
-            "group_id": None,
-            "description": "",
-            "difficult": False,
-            "shape_type": shape_type,
-            "flags": {},
-            "attributes": {},
-            "kie_linking": [],
-        })
+def shape_for_detection(det: dict) -> dict:
+    label = CLASS_NAMES.get(det["class_id"], f"class_{det['class_id']}")
+    points = det["points"]
+    shape_type = "polygon"
 
-    img_filename = os.path.basename(image_path)
+    if label == "barrier":
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        points = [[min(xs), min(ys)], [max(xs), max(ys)]]
+        shape_type = "rectangle"
 
+    return {
+        "label": label,
+        "score": det["confidence"],
+        "points": points,
+        "group_id": None,
+        "description": "",
+        "difficult": False,
+        "shape_type": shape_type,
+        "flags": {},
+        "attributes": {},
+        "kie_linking": [],
+    }
+
+
+def create_xanylabeling_json(image_path: Path, detections: list[dict], width: int, height: int) -> dict:
     return {
         "version": "4.0.0-beta.7",
         "flags": {},
         "checked": False,
-        "shapes": shapes,
-        "imagePath": img_filename,
+        "shapes": [shape_for_detection(det) for det in detections],
+        "imagePath": image_path.name,
         "imageData": None,
-        "imageHeight": img_h,
-        "imageWidth": img_w,
+        "imageHeight": height,
+        "imageWidth": width,
         "description": "",
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description="YOLO11-seg 自动标注 → X-AnyLabeling JSON（多边形）")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="模型路径")
-    parser.add_argument("--target", default=TARGET_DIR, help="要标注的图片目录")
-    parser.add_argument("--conf", type=float, default=CONF_THRESHOLD, help="置信度阈值 (默认 0.25)")
-    parser.add_argument("--overwrite", action="store_true", help="覆盖已有标注（包括手动标注）")
-    args = parser.parse_args()
+def collect_images(target: Path) -> list[Path]:
+    images: list[Path] = []
+    for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.JPEG", "*.PNG", "*.BMP"):
+        images.extend(Path(path) for path in glob.glob(str(target / pattern)))
+    return sorted(set(images))
 
-    if not os.path.exists(args.model):
-        print(f"错误: 模型不存在: {args.model}")
-        print("请先运行 python train.py 训练模型")
-        return
 
-    print(f"加载模型: {args.model}")
-    model = YOLO(args.model)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="YOLO-seg auto-label to X-AnyLabeling JSON")
+    parser.add_argument("--model", default=str(DEFAULT_MODEL), help="Trained .pt model")
+    parser.add_argument("--target", default=str(DEFAULT_TARGET), help="Image directory to annotate")
+    parser.add_argument("--conf", type=float, default=DEFAULT_CONFIDENCE)
+    parser.add_argument("--batch", type=int, default=32)
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing JSON annotations")
+    return parser.parse_args()
 
-    # 检测模型类型
-    model_type = "seg" if hasattr(model, "model") and "seg" in str(type(model.model)).lower() else "detect"
-    print(f"模型类型: {model_type}")
 
-    # 收集图片
-    img_extensions = {".jpg", ".jpeg", ".png", ".bmp"}
-    all_images = []
-    for ext in img_extensions:
-        all_images.extend(glob.glob(os.path.join(args.target, f"*{ext}")))
-        all_images.extend(glob.glob(os.path.join(args.target, f"*{ext.upper()}")))
-    all_images = list(set(all_images))
+def main() -> None:
+    args = parse_args()
+    model_path = Path(args.model)
+    target = Path(args.target)
+    if not model_path.exists():
+        raise SystemExit(f"Model not found: {model_path}")
+    if not target.exists():
+        raise SystemExit(f"Target directory not found: {target}")
 
-    if not all_images:
-        print(f"错误: 在 {args.target} 中未找到图片")
-        return
+    print("=" * 60)
+    print("AiParking auto-label")
+    print("=" * 60)
+    print(f"model: {model_path}")
+    print(f"target: {target}")
+    print(f"confidence: {args.conf}")
 
-    # 过滤已有标注
-    to_process = []
-    skipped = 0
-    for img_path in all_images:
-        json_path = os.path.splitext(img_path)[0] + ".json"
-        if os.path.exists(json_path) and not args.overwrite:
-            skipped += 1
-        else:
-            to_process.append(img_path)
+    model = YOLO(str(model_path))
+    images = collect_images(target)
+    to_process = [
+        image for image in images
+        if args.overwrite or not image.with_suffix(".json").exists()
+    ]
 
-    print(f"找到 {len(all_images)} 张图片")
-    print(f"已有标注（跳过）: {skipped} 张")
-    print(f"待标注: {len(to_process)} 张")
-    print(f"置信度阈值: {args.conf}")
-
+    print(f"images found: {len(images)}")
+    print(f"already annotated: {len(images) - len(to_process)}")
+    print(f"to process: {len(to_process)}")
     if not to_process:
-        print("没有需要标注的图片")
         return
 
-    # 批量推理
-    print("\n开始推理...")
+    device = "0" if torch.cuda.is_available() else "cpu"
     total_detections = 0
+    empty_images = 0
     processed = 0
-    empty_count = 0  # 无检测结果的图片数
 
-    batch_size = 32
-    for i in range(0, len(to_process), batch_size):
-        batch = to_process[i:i + batch_size]
-
+    for start in range(0, len(to_process), args.batch):
+        batch = to_process[start:start + args.batch]
         results = model.predict(
-            source=batch,
+            source=[str(path) for path in batch],
             conf=args.conf,
-            device="0" if torch.cuda.is_available() else "cpu",
+            device=device,
             verbose=False,
         )
 
-        for idx, result in enumerate(results):
-            img_path = batch[idx]
-            img_w, img_h = result.orig_shape[1], result.orig_shape[0]
-
-            # 提取多边形检测结果
-            detections = masks_to_polygons(result)
-
-            if len(detections) == 0:
-                # 无检测结果 → 不写 JSON（避免 X-AnyLabeling 显示假勾选）
-                empty_count += 1
+        for index, result in enumerate(results):
+            image_path = batch[index]
+            height, width = result.orig_shape
+            detections = masks_to_shapes(result)
+            if not detections:
+                empty_images += 1
             else:
-                # 有检测结果 → 保存 JSON
-                labelme_json = create_labelme_json(img_path, detections, img_w, img_h)
-                json_path = os.path.splitext(img_path)[0] + ".json"
-                with open(json_path, "w", encoding="utf-8") as f:
-                    json.dump(labelme_json, f, ensure_ascii=False, indent=2)
+                out = create_xanylabeling_json(image_path, detections, width, height)
+                image_path.with_suffix(".json").write_text(
+                    json.dumps(out, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
                 total_detections += len(detections)
-
             processed += 1
 
-        print(f"  进度: {processed}/{len(to_process)}  "
-              f"({total_detections} 个检测, {empty_count} 张空图)")
+        print(
+            f"progress: {processed}/{len(to_process)} "
+            f"({total_detections} detections, {empty_images} empty)"
+        )
 
-    print(f"\n完成!")
-    print(f"处理: {processed} 张图片")
-    print(f"检测: {total_detections} 个停车位（多边形标注）")
-    print(f"无目标: {empty_count} 张（未写入 JSON）")
-    print(f"标注已保存到: {args.target}")
-    print(f"\n下一步:")
-    print(f"  1. 用 X-AnyLabeling 打开 {args.target} 逐张审核")
-    print(f"  2. 修正错误标注，补充漏检的目标")
-    print(f"  3. 运行 python labelme2yolox.py 生成最终数据集")
+    print("\nFinished")
+    print(f"processed: {processed}")
+    print(f"detections: {total_detections}")
+    print(f"empty images without JSON: {empty_images}")
+    print(f"annotations saved to: {target}")
 
 
 if __name__ == "__main__":
