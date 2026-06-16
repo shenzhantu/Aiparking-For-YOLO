@@ -47,16 +47,17 @@ python predict.py --target "D:\Aiparking\image backcup\images（5）" --conf 0.4
 
 - 原始图片与标注数据集：`images*/`、`dataset*/`
 - Ultralytics 训练输出：`runs/`
-- PyTorch/ONNX/OM/Engine 权重：`*.pt`、`*.onnx`、`*.om`、`*.engine`
+- 训练过程权重与板端转换产物：`weights/`、`epoch*.pt`、`*.om`、`*.engine`
 - 原始运行日志：`*.log`、`*.done`、临时状态 JSON
 
-需要交付给板端同学的模型文件位于本地：
+当前稳定模型会随仓库保留在：
 
 ```text
-D:\Aiparking\Aiparking For YOLO\runs\parking_yolov8_seg\weights\best.onnx
+models/best.pt
+models/best.onnx
 ```
 
-该文件建议通过 GitHub Release、网盘或其他制品分发方式共享，不直接提交到源码仓库。
+其中 `best.pt` 便于继续训练或用 Ultralytics 推理，`best.onnx` 便于交付板端同学继续转换为 OM 等部署格式。
 
 ## 更新记录
 

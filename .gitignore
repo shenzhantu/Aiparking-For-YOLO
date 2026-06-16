@@ -17,7 +17,7 @@ D:/Aiparking/image backcup/
 *.cache
 runs/
 
-# Model weights / exports should be published as release assets, not committed.
+# Model weights / exports are ignored by default.
 *.pt
 *.pth
 *.onnx
@@ -26,6 +26,8 @@ runs/
 weights/
 models/*.pt
 models/*.onnx
+!models/best.pt
+!models/best.onnx
 
 # Keep Markdown logs in GitHub, ignore raw runtime logs and state files.
 log/*.log

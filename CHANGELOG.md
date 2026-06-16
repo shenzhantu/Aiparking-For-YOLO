@@ -38,7 +38,8 @@
 - 主训练模型切换为 **YOLOv8s-seg**，优先适配板端部署。
 - 训练素材和生成数据集迁移到 `D:\Aiparking\image backcup`，避免 GitHub 仓库体积过大。
 - 使用加权训练数据，降低早期低质量素材影响，提高后期素材占比。
-- 导出 ONNX 板端中间格式：`runs\parking_yolov8_seg\weights\best.onnx`
+- 仓库保留当前稳定模型：`models\best.pt` 与 `models\best.onnx`
+- 导出 ONNX 板端中间格式：`models\best.onnx`
 
 ### 📝 预测 images（5）/ — 1,219 张，检出率 87.4%
 
