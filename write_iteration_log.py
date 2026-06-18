@@ -10,13 +10,17 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
 
-V3_ALL_MASK_MAP50 = 0.692
-V3_BARRIER_MASK_MAP50 = 0.412
+PREVIOUS_VERSION = "v4.0"
+CURRENT_VERSION = "v5.0"
+CURRENT_TITLE = "第五轮训练（YOLOv8，barrier 强化）"
+PREVIOUS_ALL_MASK_MAP50 = 0.673
+PREVIOUS_BARRIER_MASK_MAP50 = 0.383
 
 
 def load_json(path: Path) -> dict:
@@ -30,6 +34,39 @@ def last_metrics(results_csv: Path) -> dict:
         return {}
     rows = list(csv.DictReader(results_csv.read_text(encoding="utf-8").splitlines()))
     return rows[-1] if rows else {}
+
+
+def class_metrics_from_log(run_log: Path) -> dict[str, dict[str, str]]:
+    if not run_log.exists():
+        return {}
+    raw = run_log.read_bytes()
+    if raw.count(b"\x00") > max(8, len(raw) // 20):
+        text = raw.decode("utf-16-le", errors="replace")
+    else:
+        text = raw.decode("utf-8", errors="replace")
+    metrics: dict[str, dict[str, str]] = {}
+    pattern = re.compile(
+        r"^\s*(all|Parking|barrier)\s+\d+\s+\d+\s+"
+        r"([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+"
+        r"([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)"
+    )
+    for line in text.splitlines():
+        match = pattern.match(line)
+        if not match:
+            continue
+        label = match.group(1)
+        values = match.groups()[1:]
+        metrics[label] = {
+            "box_p": values[0],
+            "box_r": values[1],
+            "box_map50": values[2],
+            "box_map5095": values[3],
+            "mask_p": values[4],
+            "mask_r": values[5],
+            "mask_map50": values[6],
+            "mask_map5095": values[7],
+        }
+    return metrics
 
 
 def prediction_summary(target: Path) -> dict:
@@ -80,6 +117,20 @@ def fmt_metric(value: object) -> str:
     return "—" if number is None else f"{number:.3f}"
 
 
+def fmt_class_metric(class_metrics: dict[str, dict[str, str]], label: str, key: str) -> str:
+    return fmt_metric((class_metrics.get(label) or {}).get(key))
+
+
+def fmt_class_or_metric(
+    class_metrics: dict[str, dict[str, str]],
+    label: str,
+    key: str,
+    fallback: object,
+) -> str:
+    value = (class_metrics.get(label) or {}).get(key)
+    return fmt_metric(value if value is not None else fallback)
+
+
 def fmt_change(current: object, previous: float) -> str:
     number = as_float(current)
     if number is None:
@@ -107,11 +158,15 @@ def write_log(
 ) -> None:
     build = load_json(dataset_summary)
     metrics = last_metrics(results_csv)
+    class_metrics = class_metrics_from_log(run_log)
     predictions = prediction_summary(prediction_target)
+    target_name = prediction_target.name
     train_instances = build.get("train_instances", {}) or {}
     val_instances = build.get("val_instances", {}) or {}
+    class_boosts = build.get("class_boosts", {}) or {}
     total_images = as_int(build.get("train_images")) + as_int(build.get("val_images"))
     epoch = metrics.get("epoch", "—")
+    all_mask_map50 = (class_metrics.get("all") or {}).get("mask_map50") or metrics.get("metrics/mAP50(M)")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     lines = [
@@ -121,7 +176,7 @@ def write_log(
         "",
         "---",
         "",
-        f"## v4.0 ({datetime.now().strftime('%Y-%m-%d')}) — 第四轮训练（YOLOv8）",
+        f"## {CURRENT_VERSION} ({datetime.now().strftime('%Y-%m-%d')}) — {CURRENT_TITLE}",
         "",
         f"### 📊 数据集：{total_images:,} 张图片",
         "",
@@ -130,34 +185,35 @@ def write_log(
         f"| Parking | {as_int(train_instances.get('Parking')):,} | {as_int(val_instances.get('Parking')):,} | {class_total(build, 'Parking'):,} |",
         f"| barrier | {as_int(train_instances.get('barrier')):,} | {as_int(val_instances.get('barrier')):,} | {class_total(build, 'barrier'):,} |",
         "",
-        "> 本轮训练素材位于仓库外部 `D:\\Aiparking\\image backcup`；`images（5）/` 本轮只作为预测目标，不参与训练。",
-        "> 低置信度过滤规则保持为 `score < 0.4` 不进入训练；新素材权重更高，最高权重限制为 4。",
+        f"> 本轮训练素材位于仓库外部 `D:\\Aiparking\\image backcup`；`{target_name}/` 本轮只作为预测目标，不参与训练。",
+        f"> 低置信度过滤规则保持为 `score < 0.4` 不进入训练；类别强化参数：`{class_boosts}`。",
         "",
         "### 🎯 训练结果",
         "",
-        f"> 当前记录来自第 `{epoch}` 轮；如果训练尚未结束，这里是阶段指标，不是最终 best.pt 指标。",
+        f"> 当前记录来自第 `{epoch}` 轮训练后的 best.pt 验证结果。",
         "",
         "| 类别 | Box mAP50 | Box mAP50-95 | Mask mAP50 | Mask mAP50-95 |",
         "|------|-----------|-------------|------------|---------------|",
-        f"| **all** | {fmt_metric(metrics.get('metrics/mAP50(B)'))} | {fmt_metric(metrics.get('metrics/mAP50-95(B)'))} | {fmt_metric(metrics.get('metrics/mAP50(M)'))} | {fmt_metric(metrics.get('metrics/mAP50-95(M)'))} |",
-        "| Parking | — | — | — | — |",
-        "| barrier | — | — | — | — |",
+        f"| **all** | {fmt_class_or_metric(class_metrics, 'all', 'box_map50', metrics.get('metrics/mAP50(B)'))} | {fmt_class_or_metric(class_metrics, 'all', 'box_map5095', metrics.get('metrics/mAP50-95(B)'))} | {fmt_class_or_metric(class_metrics, 'all', 'mask_map50', metrics.get('metrics/mAP50(M)'))} | {fmt_class_or_metric(class_metrics, 'all', 'mask_map5095', metrics.get('metrics/mAP50-95(M)'))} |",
+        f"| Parking | {fmt_class_metric(class_metrics, 'Parking', 'box_map50')} | {fmt_class_metric(class_metrics, 'Parking', 'box_map5095')} | {fmt_class_metric(class_metrics, 'Parking', 'mask_map50')} | {fmt_class_metric(class_metrics, 'Parking', 'mask_map5095')} |",
+        f"| barrier | {fmt_class_metric(class_metrics, 'barrier', 'box_map50')} | {fmt_class_metric(class_metrics, 'barrier', 'box_map5095')} | {fmt_class_metric(class_metrics, 'barrier', 'mask_map50')} | {fmt_class_metric(class_metrics, 'barrier', 'mask_map5095')} |",
         "",
-        "### 📈 与 v3.0 对比",
+        f"### 📈 与 {PREVIOUS_VERSION} 对比",
         "",
-        "| 指标 | v3.0 | v4.0 当前 | 变化 |",
+        f"| 指标 | {PREVIOUS_VERSION} | {CURRENT_VERSION} 当前 | 变化 |",
         "|------|------|-----------|------|",
-        f"| All Mask mAP50 | {V3_ALL_MASK_MAP50:.3f} | {fmt_metric(metrics.get('metrics/mAP50(M)'))} | {fmt_change(metrics.get('metrics/mAP50(M)'), V3_ALL_MASK_MAP50)} |",
-        f"| barrier Mask mAP50 | {V3_BARRIER_MASK_MAP50:.3f} | — | — |",
+        f"| All Mask mAP50 | {PREVIOUS_ALL_MASK_MAP50:.3f} | {fmt_metric(all_mask_map50)} | {fmt_change(all_mask_map50, PREVIOUS_ALL_MASK_MAP50)} |",
+        f"| barrier Mask mAP50 | {PREVIOUS_BARRIER_MASK_MAP50:.3f} | {fmt_class_metric(class_metrics, 'barrier', 'mask_map50')} | {fmt_change((class_metrics.get('barrier') or {}).get('mask_map50'), PREVIOUS_BARRIER_MASK_MAP50)} |",
         "",
         "### 🆕 功能更新",
         "",
         "- 训练主模型从 YOLO11s-seg 切换为 YOLOv8s-seg，优先适配板端部署。",
         "- 图片素材和生成数据集迁移到 `D:\\Aiparking\\image backcup`，避免 GitHub 仓库体积过大。",
         "- 使用加权数据集：较新的审核素材拥有更高训练占比，降低早期低质量素材的影响。",
-        "- 保留 `Parking` 与 `barrier` 两类；后续 barrier 仍需要更多含障碍物素材继续增强。",
+        "- 对含 `barrier` 的训练样本进行额外过采样，集中增强障碍物识别。",
+        "- 保留 `Parking` 与 `barrier` 两类，并继续输出适合板端转换的 ONNX 模型。",
         "",
-        f"### 📝 预测 images（5）/ — {predictions['images']:,} 张，JSON {predictions['json']:,} 个，检出率 {predictions['detection_rate']:.1f}%",
+        f"### 📝 预测 {target_name}/ — {predictions['images']:,} 张，JSON {predictions['json']:,} 个，检出率 {predictions['detection_rate']:.1f}%",
         "",
         f"- 预测标签统计：`{predictions['labels']}`",
         f"- 带 score 的自动标注数量：`{predictions['scored_shapes']}`",

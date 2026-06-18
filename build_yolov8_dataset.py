@@ -68,19 +68,6 @@ def source_weight(name: str) -> int:
     return min(index, 4)
 
 
-def source_weight(name: str) -> int:
-    """Return a conservative recency weight based on the source folder name."""
-    if name == "images":
-        return 1
-    match = re.search(r"（(\d+)）", name)
-    if not match:
-        return 1
-    index = int(match.group(1))
-    if index <= 1:
-        return 1
-    return min(index, 4)
-
-
 def discover_sources(data_root: Path, exclude: set[str]) -> list[SourceConfig]:
     sources: list[SourceConfig] = []
     for path in sorted(data_root.iterdir(), key=lambda p: p.name):
@@ -113,6 +100,21 @@ def parse_sources(data_root: Path, raw_sources: list[str] | None, exclude: set[s
             continue
         sources.append(SourceConfig(path=path, weight=max(1, weight)))
     return sources
+
+
+def parse_class_boosts(raw_boosts: list[str] | None, label_to_id: dict[str, int]) -> dict[int, int]:
+    boosts: dict[int, int] = {}
+    for item in raw_boosts or []:
+        if ":" not in item:
+            raise ValueError(f"Class boost must use label:factor format: {item}")
+        label, raw_factor = item.rsplit(":", 1)
+        if label not in label_to_id:
+            raise ValueError(f"Unknown class in boost: {label}")
+        factor = int(raw_factor)
+        if factor < 1:
+            raise ValueError(f"Class boost factor must be >= 1: {item}")
+        boosts[label_to_id[label]] = factor
+    return boosts
 
 
 def find_image_for_json(json_path: Path, data: dict) -> Path | None:
@@ -253,6 +255,13 @@ def load_base_items(
     return items, totals
 
 
+def item_repeat_count(item: BaseItem, class_boosts: dict[int, int] | None = None) -> int:
+    repeat = item.source.weight
+    for class_id in item.class_counts:
+        repeat *= (class_boosts or {}).get(class_id, 1)
+    return max(1, repeat)
+
+
 def safe_reset_output_dir(output_dir: Path) -> None:
     output_dir = output_dir.resolve()
     root = DEFAULT_DATA_ROOT.resolve()
@@ -262,12 +271,6 @@ def safe_reset_output_dir(output_dir: Path) -> None:
         raise ValueError(f"Refusing to delete unexpected output directory: {output_dir}")
     if output_dir.exists():
         shutil.rmtree(output_dir)
-
-
-def safe_name(value: str) -> str:
-    value = value.replace("（", "_").replace("）", "")
-    value = re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
-    return value.strip("_") or "source"
 
 
 def safe_name(value: str) -> str:
@@ -291,6 +294,7 @@ def write_dataset(
     classes: list[str],
     val_ratio: float,
     seed: int,
+    class_boosts: dict[int, int] | None = None,
 ) -> dict:
     rng = random.Random(seed)
     shuffled = list(items)
@@ -312,6 +316,7 @@ def write_dataset(
         "link_modes": Counter(),
         "source_images": defaultdict(int),
         "source_weighted_train_images": defaultdict(int),
+        "class_boosts": class_boosts or {},
     }
 
     def write_one(item: BaseItem, split: str, repeat_index: int) -> None:
@@ -336,7 +341,8 @@ def write_dataset(
 
     for item in train_items:
         summary["source_images"][item.source.path.name] += 1
-        for repeat_index in range(item.source.weight):
+        repeats = item_repeat_count(item, class_boosts)
+        for repeat_index in range(repeats):
             summary["source_weighted_train_images"][item.source.path.name] += 1
             write_one(item, "train", repeat_index)
 
@@ -371,6 +377,12 @@ def main() -> None:
     parser.add_argument("--source", action="append", help="Source folder or folder:weight. Repeatable.")
     parser.add_argument("--exclude", action="append", default=["images（5）"], help="Source folder name to exclude")
     parser.add_argument("--classes", nargs="+", default=DEFAULT_CLASSES)
+    parser.add_argument(
+        "--class-boost",
+        action="append",
+        default=[],
+        help="Extra train repeat multiplier for images containing a class, e.g. barrier:3",
+    )
     parser.add_argument("--min-conf", type=float, default=DEFAULT_MIN_CONFIDENCE)
     parser.add_argument("--val-ratio", type=float, default=DEFAULT_VAL_RATIO)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -387,13 +399,14 @@ def main() -> None:
         print(f"  {source.path}  weight={source.weight}")
 
     label_to_id = {name: idx for idx, name in enumerate(args.classes)}
+    class_boosts = parse_class_boosts(args.class_boost, label_to_id)
     items, totals = load_base_items(sources, label_to_id, args.min_conf)
     if not items:
         raise SystemExit("No usable annotated images after filtering.")
 
     safe_reset_output_dir(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    summary = write_dataset(items, output_dir, args.classes, args.val_ratio, args.seed)
+    summary = write_dataset(items, output_dir, args.classes, args.val_ratio, args.seed, class_boosts)
 
     print("\nRaw annotation stats:")
     for key, value in sorted(totals.items()):

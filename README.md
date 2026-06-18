@@ -33,6 +33,12 @@ python predict.py --target "D:\Aiparking\image backcup\images（5）" --conf 0.4
 
 预测会生成 X-AnyLabeling 兼容的 JSON 标注文件。
 
+当前 `images（6）/` 这类 barrier 较多的素材建议先用较低阈值辅助审核：
+
+```bash
+python predict.py --target "D:\Aiparking\image backcup\images（6）" --conf 0.2 --overwrite
+```
+
 ### 标注审核流程
 
 1. 使用 [X-AnyLabeling](https://github.com/CVHub520/X-AnyLabeling) 打开预测目录。
@@ -55,9 +61,10 @@ python predict.py --target "D:\Aiparking\image backcup\images（5）" --conf 0.4
 ```text
 models/best.pt
 models/best.onnx
+models/best_512.onnx
 ```
 
-其中 `best.pt` 便于继续训练或用 Ultralytics 推理，`best.onnx` 便于交付板端同学继续转换为 OM 等部署格式。
+其中 `best.pt` 便于继续训练或用 Ultralytics 推理，`best.onnx` 是标准 640 输入 ONNX，`best_512.onnx` 是轻量 512 输入版本，便于板端优先测试帧率并继续转换为 OM 等部署格式。
 
 ## 更新记录
 
@@ -73,15 +80,15 @@ log/*.md
 
 这些 Markdown 日志会保留在 GitHub 仓库中，便于追踪训练数据、模型效果和关键操作。
 
-## 当前 v4.0 指标
+## 当前 v5.0 指标
 
 详见 [CHANGELOG.md](CHANGELOG.md)。摘要：
 
 | 类别 | Box mAP50 | Box mAP50-95 | Mask mAP50 | Mask mAP50-95 |
 |------|-----------|-------------|------------|---------------|
-| all | 0.904 | 0.671 | 0.673 | 0.504 |
-| Parking | 0.967 | 0.874 | 0.963 | 0.816 |
-| barrier | 0.841 | 0.468 | 0.383 | 0.193 |
+| all | 0.974 | 0.786 | 0.756 | 0.571 |
+| Parking | 0.986 | 0.919 | 0.980 | 0.855 |
+| barrier | 0.962 | 0.653 | 0.533 | 0.288 |
 
 ## 目录结构
 

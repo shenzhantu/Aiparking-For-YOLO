@@ -9,12 +9,12 @@ $RunDir = Join-Path $Project "runs\$RunName"
 $DatasetDir = "D:\Aiparking\image backcup\dataset_yolov8_weighted"
 $OpenParen = [char]0xFF08
 $CloseParen = [char]0xFF09
-$TargetDir = "D:\Aiparking\image backcup\images${OpenParen}5${CloseParen}"
+$TargetDir = "D:\Aiparking\image backcup\images${OpenParen}6${CloseParen}"
 $Stamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
 $RunLog = Join-Path $LogDir "${Stamp}_yolov8_iteration_run.log"
 $MonitorLog = Join-Path $LogDir "${Stamp}_yolov8_iteration_monitor.md"
 $DoneFile = Join-Path $LogDir "${Stamp}_yolov8_iteration.done"
-$FinalLog = Join-Path $LogDir "$(Get-Date -Format "yyyy-MM-dd")_yolov8_iteration4.md"
+$FinalLog = Join-Path $LogDir "$(Get-Date -Format "yyyy-MM-dd")_yolov8_iteration5_barrier.md"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 if (Test-Path -LiteralPath $DoneFile) {
@@ -41,6 +41,9 @@ Run-Step "Build weighted YOLOv8 dataset" @(
     "--data-root", "D:\Aiparking\image backcup",
     "--output", $DatasetDir,
     "--min-conf", "0.4",
+    "--exclude", "images${OpenParen}5${CloseParen}",
+    "--exclude", "images${OpenParen}6${CloseParen}",
+    "--class-boost", "barrier:3",
     "--val-ratio", "0.15",
     "--seed", "20260616"
 )
@@ -70,7 +73,7 @@ try {
         "--save-period", "20"
     )
 
-    Run-Step "Predict images5" @(
+    Run-Step "Predict images6" @(
         (Join-Path $Project "predict.py"),
         "--model", (Join-Path $RunDir "weights\best.pt"),
         "--target", $TargetDir,

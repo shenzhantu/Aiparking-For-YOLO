@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -63,7 +64,7 @@ def main() -> None:
     model_path = project / "runs" / "parking_yolov8_seg" / "weights" / "best.pt"
     onnx_path = project / "runs" / "parking_yolov8_seg" / "weights" / "best.onnx"
     results_csv = project / "runs" / "parking_yolov8_seg" / "results.csv"
-    final_log = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}_yolov8_iteration4.md"
+    final_log = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}_yolov8_iteration5_barrier.md"
 
     with finish_log.open("a", encoding="utf-8") as out:
         out.write(f"Waiting for training PID {train_pid} at {datetime.now()}\n")
@@ -74,6 +75,29 @@ def main() -> None:
     done_file.write_text(f"training finished at {datetime.now()}\n", encoding="utf-8")
 
     if model_path.exists():
+        run_step(
+            [
+                args.python,
+                str(project / "export_onnx.py"),
+                "--model",
+                str(model_path),
+                "--imgsz",
+                "640",
+                "512",
+            ],
+            finish_log,
+            finish_err,
+        )
+
+        models_dir = project / "models"
+        models_dir.mkdir(exist_ok=True)
+        shutil.copy2(model_path, models_dir / "best.pt")
+        if onnx_path.exists():
+            shutil.copy2(onnx_path, models_dir / "best.onnx")
+        lightweight_onnx = model_path.with_name("best_512.onnx")
+        if lightweight_onnx.exists():
+            shutil.copy2(lightweight_onnx, models_dir / "best_512.onnx")
+
         predict_code = run_step(
             [
                 args.python,

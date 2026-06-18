@@ -3,7 +3,7 @@ Auto-label images with a trained YOLO segmentation model and export X-AnyLabelin
 
 Defaults target the current YOLOv8 iteration:
   model:  D:\\Aiparking\\Aiparking For YOLO\\runs\\parking_yolov8_seg\\weights\\best.pt
-  target: D:\\Aiparking\\image backcup\\images（5）
+  target: D:\\Aiparking\\image backcup\\images（6）
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL = BASE_DIR / "runs" / "parking_yolov8_seg" / "weights" / "best.pt"
-DEFAULT_TARGET = Path(r"D:\Aiparking\image backcup\images（5）")
+DEFAULT_TARGET = Path(r"D:\Aiparking\image backcup\images（6）")
 DEFAULT_CONFIDENCE = 0.4
 CLASS_NAMES = {0: "Parking", 1: "barrier"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp"}

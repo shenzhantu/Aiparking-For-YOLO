@@ -14,7 +14,7 @@ class ChineseLogTests(unittest.TestCase):
             root = Path(tmp)
             dataset_summary = root / "build_summary.json"
             results_csv = root / "results.csv"
-            prediction_target = root / "images5"
+            prediction_target = root / "images（6）"
             output = root / "final.md"
             run_log = root / "run.log"
             monitor_log = root / "monitor.md"
@@ -54,6 +54,12 @@ class ChineseLogTests(unittest.TestCase):
                 writer.writerow({"epoch": "3", "metrics/mAP50(M)": "0.75"})
             model.write_bytes(b"pt")
             onnx.write_bytes(b"onnx")
+            run_log.write_text(
+                "                   all        951       1243       0.94      0.962      0.974      0.786        0.8      0.821      0.756      0.571\n"
+                "               Parking        934       1152      0.964      0.966      0.986      0.919      0.956      0.965       0.98      0.855\n"
+                "               barrier         57         91      0.916      0.958      0.962      0.653      0.644      0.677      0.533      0.288\n",
+                encoding="utf-8",
+            )
 
             write_log(
                 output=output,
@@ -68,9 +74,9 @@ class ChineseLogTests(unittest.TestCase):
 
             text = output.read_text(encoding="utf-8")
             self.assertIn("# 更新日志", text)
-            self.assertIn("## v4.0", text)
+            self.assertIn("## v5.0", text)
             self.assertIn("### 📊 数据集", text)
-            self.assertIn("### 📝 预测 images（5）/", text)
+            self.assertIn("### 📝 预测 images（6）/", text)
             self.assertNotIn("What Changed", text)
 
     def test_final_iteration_log_matches_changelog_style(self):
@@ -78,7 +84,7 @@ class ChineseLogTests(unittest.TestCase):
             root = Path(tmp)
             dataset_summary = root / "build_summary.json"
             results_csv = root / "results.csv"
-            prediction_target = root / "images5"
+            prediction_target = root / "images（6）"
             output = root / "final.md"
             run_log = root / "run.log"
             monitor_log = root / "monitor.md"
@@ -121,6 +127,12 @@ class ChineseLogTests(unittest.TestCase):
                 )
             model.write_bytes(b"pt")
             onnx.write_bytes(b"onnx")
+            run_log.write_text(
+                "                   all        951       1243       0.94      0.962      0.974      0.786        0.8      0.821      0.756      0.571\n"
+                "               Parking        934       1152      0.964      0.966      0.986      0.919      0.956      0.965       0.98      0.855\n"
+                "               barrier         57         91      0.916      0.958      0.962      0.653      0.644      0.677      0.533      0.288\n",
+                encoding="utf-8",
+            )
 
             write_log(
                 output=output,
@@ -134,12 +146,13 @@ class ChineseLogTests(unittest.TestCase):
             )
 
             text = output.read_text(encoding="utf-8")
-            self.assertIn("## v4.0", text)
+            self.assertIn("## v5.0", text)
             self.assertIn("### 📊 数据集", text)
             self.assertIn("| 类别 | 训练集 | 验证集 | 总计 |", text)
             self.assertIn("### 🎯 训练结果", text)
             self.assertIn("| 类别 | Box mAP50 | Box mAP50-95 | Mask mAP50 | Mask mAP50-95 |", text)
-            self.assertIn("### 📝 预测 images（5）/", text)
+            self.assertIn("| barrier | 0.962 | 0.653 | 0.533 | 0.288 |", text)
+            self.assertIn("### 📝 预测 images（6）/", text)
 
     def test_monitor_snapshot_uses_chinese_labels(self):
         with tempfile.TemporaryDirectory() as tmp:

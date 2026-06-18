@@ -8,6 +8,7 @@ from build_yolov8_dataset import (
     convert_points_to_polygon,
     extract_yolo_segments,
     iter_weighted_items,
+    item_repeat_count,
 )
 
 
@@ -71,6 +72,18 @@ class BuildYolov8DatasetTests(unittest.TestCase):
 
         self.assertEqual(len(items), 3)
         self.assertEqual([item.repeat_index for item in items], [0, 1, 2])
+
+    def test_barrier_class_boost_multiplies_training_repeats(self):
+        item = type(
+            "FakeItem",
+            (),
+            {
+                "source": SourceConfig(Path("images（4）"), 2),
+                "class_counts": {1: 3},
+            },
+        )()
+
+        self.assertEqual(item_repeat_count(item, {1: 4}), 8)
 
 
 if __name__ == "__main__":
