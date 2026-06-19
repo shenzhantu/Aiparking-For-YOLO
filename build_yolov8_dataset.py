@@ -35,6 +35,7 @@ IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".JPG", ".JPEG", ".PNG", ".
 class SourceConfig:
     path: Path
     weight: int
+    trusted: bool = False
 
 
 @dataclass(frozen=True)
@@ -81,9 +82,23 @@ def discover_sources(data_root: Path, exclude: set[str]) -> list[SourceConfig]:
     return sources
 
 
-def parse_sources(data_root: Path, raw_sources: list[str] | None, exclude: set[str]) -> list[SourceConfig]:
+def parse_sources(
+    data_root: Path,
+    raw_sources: list[str] | None,
+    exclude: set[str],
+    trusted_sources: set[str] | None = None,
+) -> list[SourceConfig]:
+    trusted_sources = trusted_sources or set()
     if not raw_sources:
-        return discover_sources(data_root, exclude)
+        sources = discover_sources(data_root, exclude)
+        return [
+            SourceConfig(
+                path=source.path,
+                weight=source.weight,
+                trusted=source.path.name in trusted_sources or str(source.path) in trusted_sources,
+            )
+            for source in sources
+        ]
 
     sources: list[SourceConfig] = []
     for item in raw_sources:
@@ -98,7 +113,8 @@ def parse_sources(data_root: Path, raw_sources: list[str] | None, exclude: set[s
             path = data_root / name
         if path.name in exclude:
             continue
-        sources.append(SourceConfig(path=path, weight=max(1, weight)))
+        trusted = name in trusted_sources or path.name in trusted_sources or str(path) in trusted_sources
+        sources.append(SourceConfig(path=path, weight=max(1, weight), trusted=trusted))
     return sources
 
 
@@ -229,7 +245,8 @@ def load_base_items(
                 with Image.open(image_path) as image:
                     image_size = image.size
 
-            lines, stats = extract_yolo_segments(data, label_to_id, min_confidence, image_size)
+            source_min_confidence = 0.0 if source.trusted else min_confidence
+            lines, stats = extract_yolo_segments(data, label_to_id, source_min_confidence, image_size)
             totals.update(stats)
             if not lines:
                 totals["empty_after_filter"] += 1
@@ -274,6 +291,7 @@ def safe_reset_output_dir(output_dir: Path) -> None:
 
 
 def safe_name(value: str) -> str:
+    value = value.replace("（", "_").replace("）", "")
     value = value.replace("（", "_").replace("）", "")
     value = re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
     return value.strip("_") or "source"
@@ -375,6 +393,12 @@ def main() -> None:
     parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT), help="External image/JSON root")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT_DIR), help="Generated YOLO dataset directory")
     parser.add_argument("--source", action="append", help="Source folder or folder:weight. Repeatable.")
+    parser.add_argument(
+        "--trusted-source",
+        action="append",
+        default=[],
+        help="Source folder whose reviewed labels should ignore score filtering. Repeatable.",
+    )
     parser.add_argument("--exclude", action="append", default=["images（5）"], help="Source folder name to exclude")
     parser.add_argument("--classes", nargs="+", default=DEFAULT_CLASSES)
     parser.add_argument(
@@ -390,13 +414,16 @@ def main() -> None:
 
     data_root = Path(args.data_root)
     output_dir = Path(args.output)
-    sources = parse_sources(data_root, args.source, set(args.exclude or []))
+    exclude = set(args.exclude or [])
+    exclude.add("images（5）")
+    sources = parse_sources(data_root, args.source, exclude, set(args.trusted_source or []))
     if not sources:
         raise SystemExit("No source directories with JSON annotations found.")
 
     print("Training sources:")
     for source in sources:
-        print(f"  {source.path}  weight={source.weight}")
+        trusted = " trusted" if source.trusted else ""
+        print(f"  {source.path}  weight={source.weight}{trusted}")
 
     label_to_id = {name: idx for idx, name in enumerate(args.classes)}
     class_boosts = parse_class_boosts(args.class_boost, label_to_id)

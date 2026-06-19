@@ -9,6 +9,7 @@ from build_yolov8_dataset import (
     extract_yolo_segments,
     iter_weighted_items,
     item_repeat_count,
+    load_base_items,
 )
 
 
@@ -84,6 +85,49 @@ class BuildYolov8DatasetTests(unittest.TestCase):
         )()
 
         self.assertEqual(item_repeat_count(item, {1: 4}), 8)
+
+    def test_trusted_source_keeps_reviewed_low_confidence_shapes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "images（6）"
+            source_dir.mkdir()
+            image_path = source_dir / "frame_0001.jpg"
+            json_path = source_dir / "frame_0001.json"
+            image_path.write_bytes(b"fake")
+            json_path.write_text(
+                json.dumps(
+                    {
+                        "imagePath": image_path.name,
+                        "imageWidth": 100,
+                        "imageHeight": 100,
+                        "shapes": [
+                            {
+                                "label": "barrier",
+                                "score": 0.2,
+                                "shape_type": "rectangle",
+                                "points": [[10, 20], [30, 50]],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            trusted_items, trusted_totals = load_base_items(
+                [SourceConfig(source_dir, 1, trusted=True)],
+                {"Parking": 0, "barrier": 1},
+                0.4,
+            )
+            normal_items, normal_totals = load_base_items(
+                [SourceConfig(source_dir, 1, trusted=False)],
+                {"Parking": 0, "barrier": 1},
+                0.4,
+            )
+
+        self.assertEqual(len(trusted_items), 1)
+        self.assertEqual(trusted_totals["class:barrier"], 1)
+        self.assertEqual(len(normal_items), 0)
+        self.assertEqual(normal_totals["low_confidence"], 1)
 
 
 if __name__ == "__main__":
