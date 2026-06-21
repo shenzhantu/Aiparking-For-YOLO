@@ -12,6 +12,7 @@ images*/
 dataset/
 dataset*/
 D:/Aiparking/image backcup/
+dedupe_preview/
 
 # Ultralytics outputs and generated caches stay outside Git.
 *.cache
