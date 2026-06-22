@@ -70,6 +70,11 @@ class ChineseLogTests(unittest.TestCase):
                 onnx=onnx,
                 run_log=run_log,
                 monitor_log=monitor_log,
+                current_version="v5.0",
+                current_title="第五轮训练（YOLOv8，barrier 强化）",
+                previous_version="v4.0",
+                previous_all_mask_map50=0.673,
+                previous_barrier_mask_map50=0.383,
             )
 
             text = output.read_text(encoding="utf-8")
@@ -143,6 +148,11 @@ class ChineseLogTests(unittest.TestCase):
                 onnx=onnx,
                 run_log=run_log,
                 monitor_log=monitor_log,
+                current_version="v5.0",
+                current_title="第五轮训练（YOLOv8，barrier 强化）",
+                previous_version="v4.0",
+                previous_all_mask_map50=0.673,
+                previous_barrier_mask_map50=0.383,
             )
 
             text = output.read_text(encoding="utf-8")

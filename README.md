@@ -59,12 +59,17 @@ python predict.py --target "D:\Aiparking\image backcup\images（6）" --conf 0.2
 当前稳定模型会随仓库保留在：
 
 ```text
-models/best.pt
-models/best.onnx
-models/best_512.onnx
+models/best.pt                  # Teacher 模型 (YOLOv8s-seg, 22.7 MB)
+models/best.onnx                # Teacher ONNX 640 输入 (45.2 MB)
+models/best_512.onnx            # Teacher ONNX 512 输入 (45.1 MB)
+models/best_yolov8n_light.pt   # Student 模型 (YOLOv8n-seg, 6.5 MB)
+models/best_yolov8n_light_512.onnx  # Student ONNX 512 输入 (12.6 MB)
 ```
 
-其中 `best.pt` 便于继续训练或用 Ultralytics 推理，`best.onnx` 是标准 640 输入 ONNX，`best_512.onnx` 是轻量 512 输入版本，便于板端优先测试帧率并继续转换为 OM 等部署格式。
+- `best.pt` 便于继续训练或用 Ultralytics 推理
+- `best.onnx` 是标准 640 输入 ONNX
+- `best_512.onnx` / `best_yolov8n_light_512.onnx` 是 512 输入版本，便于板端测试帧率
+- 所有 ONNX 均可通过各自工具链转换为 OM 等部署格式
 
 ## 更新记录
 
@@ -80,15 +85,25 @@ log/*.md
 
 这些 Markdown 日志会保留在 GitHub 仓库中，便于追踪训练数据、模型效果和关键操作。
 
-## 当前 v5.0 指标
+## 当前 v6.0 / v7.0 指标
 
-详见 [CHANGELOG.md](CHANGELOG.md)。摘要：
+详见 [CHANGELOG.md](CHANGELOG.md)。
+
+### Teacher 模型 (YOLOv8s-seg, v6.0)
 
 | 类别 | Box mAP50 | Box mAP50-95 | Mask mAP50 | Mask mAP50-95 |
 |------|-----------|-------------|------------|---------------|
-| all | 0.974 | 0.786 | 0.756 | 0.571 |
-| Parking | 0.986 | 0.919 | 0.980 | 0.855 |
-| barrier | 0.962 | 0.653 | 0.533 | 0.288 |
+| all | 0.981 | 0.826 | 0.909 | 0.745 |
+| Parking | 0.979 | 0.894 | 0.976 | 0.836 |
+| barrier | 0.984 | 0.758 | 0.842 | 0.654 |
+
+### Student 模型 (YOLOv8n-seg, v7.0)
+
+| 类别 | Box mAP50 | Box mAP50-95 | Mask mAP50 | Mask mAP50-95 |
+|------|-----------|-------------|------------|---------------|
+| all | 0.955 | 0.771 | 0.803 | 0.650 |
+| Parking | 0.916 | 0.865 | 0.944 | 0.810 |
+| barrier | 0.938 | 0.682 | 0.656 | 0.484 |
 
 ## 目录结构
 
@@ -99,13 +114,19 @@ log/*.md
 ├── build_yolov8_dataset.py     # 构建 YOLOv8 加权数据集
 ├── xanylabeling2coco.py        # X-AnyLabeling/LabelMe JSON 转 COCO
 ├── labelme2yolox.py            # LabelMe 转 YOLOX/COCO 数据集
+├── select_premium_images.py    # 精选素材筛选（去重 + 教师分桶）
+├── dedupe_similar_images.py    # BK-tree 感知哈希去重
 ├── cleanup_auto.py             # 清理错误自动标注
-├── export_onnx.py              # ONNX 导出工具
+├── export_onnx.py              # ONNX 导出工具（多尺寸）
+├── monitor_training.py         # 训练过程 GPU/指标监控
+├── write_iteration_log.py      # Markdown 训练日志写入
+├── finish_after_training.py    # 训练后处理编排
 ├── check_onnx.py               # ONNX 检查工具
 ├── parking.yaml                # 数据集配置示例
 ├── CHANGELOG.md                # 训练迭代更新记录
+├── CLAUDE.md                   # Claude Code 项目说明书
 ├── log/                        # Markdown 操作日志
-└── tests/                      # 单元测试
+└── tests/                      # 单元测试 (19个)
 ```
 
 ## 环境

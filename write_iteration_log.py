@@ -16,13 +16,6 @@ from datetime import datetime
 from pathlib import Path
 
 
-PREVIOUS_VERSION = "v4.0"
-CURRENT_VERSION = "v5.0"
-CURRENT_TITLE = "第五轮训练（YOLOv8，barrier 强化）"
-PREVIOUS_ALL_MASK_MAP50 = 0.673
-PREVIOUS_BARRIER_MASK_MAP50 = 0.383
-
-
 def load_json(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -155,6 +148,11 @@ def write_log(
     onnx: Path,
     run_log: Path,
     monitor_log: Path,
+    current_version: str,
+    current_title: str,
+    previous_version: str,
+    previous_all_mask_map50: float,
+    previous_barrier_mask_map50: float,
 ) -> None:
     build = load_json(dataset_summary)
     metrics = last_metrics(results_csv)
@@ -176,7 +174,7 @@ def write_log(
         "",
         "---",
         "",
-        f"## {CURRENT_VERSION} ({datetime.now().strftime('%Y-%m-%d')}) — {CURRENT_TITLE}",
+        f"## {current_version} ({datetime.now().strftime('%Y-%m-%d')}) — {current_title}",
         "",
         f"### 📊 数据集：{total_images:,} 张图片",
         "",
@@ -198,12 +196,12 @@ def write_log(
         f"| Parking | {fmt_class_metric(class_metrics, 'Parking', 'box_map50')} | {fmt_class_metric(class_metrics, 'Parking', 'box_map5095')} | {fmt_class_metric(class_metrics, 'Parking', 'mask_map50')} | {fmt_class_metric(class_metrics, 'Parking', 'mask_map5095')} |",
         f"| barrier | {fmt_class_metric(class_metrics, 'barrier', 'box_map50')} | {fmt_class_metric(class_metrics, 'barrier', 'box_map5095')} | {fmt_class_metric(class_metrics, 'barrier', 'mask_map50')} | {fmt_class_metric(class_metrics, 'barrier', 'mask_map5095')} |",
         "",
-        f"### 📈 与 {PREVIOUS_VERSION} 对比",
+        f"### 📈 与 {previous_version} 对比",
         "",
-        f"| 指标 | {PREVIOUS_VERSION} | {CURRENT_VERSION} 当前 | 变化 |",
+        f"| 指标 | {previous_version} | {current_version} 当前 | 变化 |",
         "|------|------|-----------|------|",
-        f"| All Mask mAP50 | {PREVIOUS_ALL_MASK_MAP50:.3f} | {fmt_metric(all_mask_map50)} | {fmt_change(all_mask_map50, PREVIOUS_ALL_MASK_MAP50)} |",
-        f"| barrier Mask mAP50 | {PREVIOUS_BARRIER_MASK_MAP50:.3f} | {fmt_class_metric(class_metrics, 'barrier', 'mask_map50')} | {fmt_change((class_metrics.get('barrier') or {}).get('mask_map50'), PREVIOUS_BARRIER_MASK_MAP50)} |",
+        f"| All Mask mAP50 | {previous_all_mask_map50:.3f} | {fmt_metric(all_mask_map50)} | {fmt_change(all_mask_map50, previous_all_mask_map50)} |",
+        f"| barrier Mask mAP50 | {previous_barrier_mask_map50:.3f} | {fmt_class_metric(class_metrics, 'barrier', 'mask_map50')} | {fmt_change((class_metrics.get('barrier') or {}).get('mask_map50'), previous_barrier_mask_map50)} |",
         "",
         "### 🆕 功能更新",
         "",
@@ -246,6 +244,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--onnx", required=True)
     parser.add_argument("--run-log", required=True)
     parser.add_argument("--monitor-log", required=True)
+    parser.add_argument("--current-version", required=True, help="当前版本号，如 v8.0")
+    parser.add_argument("--current-title", required=True, help="当前迭代标题")
+    parser.add_argument("--previous-version", required=True, help="上一轮版本号，如 v7.0")
+    parser.add_argument("--previous-all-mask-map50", type=float, required=True, help="上一轮 All Mask mAP50")
+    parser.add_argument("--previous-barrier-mask-map50", type=float, required=True, help="上一轮 barrier Mask mAP50")
     return parser.parse_args()
 
 
@@ -261,6 +264,11 @@ def main() -> None:
         onnx=Path(args.onnx),
         run_log=Path(args.run_log),
         monitor_log=Path(args.monitor_log),
+        current_version=args.current_version,
+        current_title=args.current_title,
+        previous_version=args.previous_version,
+        previous_all_mask_map50=args.previous_all_mask_map50,
+        previous_barrier_mask_map50=args.previous_barrier_mask_map50,
     )
     print(f"已写入日志：{output}")
 
