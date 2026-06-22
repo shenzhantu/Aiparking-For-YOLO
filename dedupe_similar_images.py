@@ -20,7 +20,7 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from PIL import Image, ImageStat
 
@@ -169,7 +169,22 @@ def compute_luma_bucket(image_path: Path, bucket_size: int = 8) -> int:
 
 
 def compute_signature(image_path: Path) -> ImageSignature:
-    return ImageSignature(dhash=compute_dhash(image_path), luma_bucket=compute_luma_bucket(image_path))
+    hash_size = 8
+    with Image.open(image_path) as image:
+        gray_hash = image.convert("L").resize((hash_size + 1, hash_size), Image.Resampling.LANCZOS)
+        hash_pixels = list(gray_hash.tobytes())
+        gray_luma = image.convert("L").resize((32, 32), Image.Resampling.BILINEAR)
+        mean_luma = ImageStat.Stat(gray_luma).mean[0]
+
+    value = 0
+    for row in range(hash_size):
+        row_start = row * (hash_size + 1)
+        for col in range(hash_size):
+            left = hash_pixels[row_start + col]
+            right = hash_pixels[row_start + col + 1]
+            value = (value << 1) | int(left > right)
+
+    return ImageSignature(dhash=value, luma_bucket=int(mean_luma // 8))
 
 
 def hamming_distance(first: int, second: int) -> int:
@@ -180,14 +195,21 @@ def signature_distance(first: ImageSignature, second: ImageSignature) -> int:
     return hamming_distance(first.dhash, second.dhash) + abs(first.luma_bucket - second.luma_bucket)
 
 
-def select_unique_images(items: list[ImageItem], threshold: int) -> DedupeResult:
+def select_unique_images(
+    items: list[ImageItem],
+    threshold: int,
+    progress: Callable[[int, int], None] | None = None,
+) -> DedupeResult:
     selected: list[SelectedItem] = []
     duplicates: list[DuplicateItem] = []
     duplicate_groups: dict[int, list[DuplicateItem]] = {}
     failed: list[FailedItem] = []
     index = BKTree()
 
-    for item in items:
+    total = len(items)
+    for item_index, item in enumerate(items, start=1):
+        if progress:
+            progress(item_index, total)
         try:
             signature = compute_signature(item.path)
         except (OSError, ValueError) as exc:

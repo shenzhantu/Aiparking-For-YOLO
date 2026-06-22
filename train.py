@@ -70,6 +70,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def build_train_kwargs(args: argparse.Namespace, data_path: Path, device: str) -> dict:
+    return {
+        "data": str(data_path),
+        "epochs": args.epochs,
+        "imgsz": args.imgsz,
+        "batch": args.batch,
+        "device": device,
+        "project": args.project,
+        "name": args.name,
+        "exist_ok": True,
+        "patience": args.patience,
+        "save": True,
+        "save_period": args.save_period,
+        "workers": args.workers,
+        "verbose": True,
+        "plots": False,
+    }
+
+
 def main() -> None:
     args = parse_args()
     data_path = Path(args.data)
@@ -93,21 +112,7 @@ def main() -> None:
 
     install_results_csv_fallback()
     model = YOLO(args.model)
-    model.train(
-        data=str(data_path),
-        epochs=args.epochs,
-        imgsz=args.imgsz,
-        batch=args.batch,
-        device=device,
-        project=args.project,
-        name=args.name,
-        exist_ok=True,
-        patience=args.patience,
-        save=True,
-        save_period=args.save_period,
-        workers=args.workers,
-        verbose=True,
-    )
+    model.train(**build_train_kwargs(args, data_path, device))
 
     best_model = Path(args.project) / args.name / "weights" / "best.pt"
     print("\n" + "=" * 60)

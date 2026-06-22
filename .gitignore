@@ -30,6 +30,8 @@ models/*.onnx
 !models/best.pt
 !models/best.onnx
 !models/best_512.onnx
+!models/best_yolov8n_light.pt
+!models/best_yolov8n_light_512.onnx
 
 # Keep Markdown logs in GitHub, ignore raw runtime logs and state files.
 log/*.log
