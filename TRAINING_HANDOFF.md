@@ -1,8 +1,8 @@
 # AiParking 模型训练与监督交接文档
 
-> 适用项目：`D:\Aiparking\Aiparking For YOLO`  
-> 当前数据主目录：`D:\Aiparking\IImages`  
-> 当前主线：YOLOv8n-seg、512 输入、Parking 单类别、四边形训练标注  
+> 适用项目：`D:\Aiparking\Aiparking For YOLO`
+> 当前数据主目录：`D:\Aiparking\IImages`
+> 当前主线：YOLOv8n-seg、512 输入、Parking 单类别、四边形训练标注
 > 最后核对日期：2026-07-13
 
 本文档用于后续人员或自动化代理接管 AiParking 的数据清理、训练、监督、验证、部署文件导出和 GitHub 记录工作。任何新一轮训练都必须先阅读“红线要求”和“训练前检查清单”。
