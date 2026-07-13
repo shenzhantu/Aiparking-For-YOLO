@@ -63,4 +63,4 @@
 
 每小时监控日志：`D:\Aiparking\Aiparking For YOLO\log\2026-07-13_iimages_yolov8n_monitor.log`
 
-训练结束后的 epoch、最佳指标、GPU 情况和 ONNX 导出结果已补充；GitHub 提交将在本次收尾中完成。
+训练结束后的 epoch、最佳指标、GPU 情况和 ONNX 导出结果已补充；本次代码、日志和部署模型已通过 HTTPS 推送到 GitHub。
