@@ -4,6 +4,51 @@
 
 ---
 
+## v8.0 (2026-07-13) - IImages 场景专用轻量 YOLOv8n-seg 模型
+
+### 训练数据
+
+| 项目 | 数量 |
+|---|---:|
+| 原始图片 | 10,646 |
+| 图片/JSON 有效配对 | 7,503 |
+| 实际可用样本 | 7,471 |
+| 训练集 | 5,604 |
+| 验证集 | 1,867 |
+| 训练实例 | 4,448 |
+| 验证实例 | 1,814 |
+| 训练负样本 | 1,186 |
+| 验证负样本 | 74 |
+
+> 本轮跳过相似图片去重和训练前备份，按要求直接使用 `D:\Aiparking\IImages` 中有同名 JSON 的素材。`Parking`/`parking` 已统一为 `Parking`，只训练 Parking 单类别；四边形标注保留并转换为 YOLOv8-seg 标签。
+
+### 训练结果
+
+> 使用 `yolov8n-seg.pt`，输入尺寸 512，batch 32，最多 500 epochs，patience 80。实际训练 344 epochs，耗时 6.981 小时，最佳模型来自第 264 轮。
+
+| 指标 | Box | Mask |
+|---|---:|---:|
+| Precision | 0.982 | 0.981 |
+| Recall | 0.942 | 0.941 |
+| mAP50 | 0.987 | 0.986 |
+| mAP50-95 | 0.893 | 0.836 |
+
+### 部署文件
+
+- `models\best_yolov8n_iimages_quad_v1.pt`，约 6.9 MB
+- `models\best_yolov8n_iimages_quad_v1_512.onnx`，约 13.2 MB
+- ONNX 输入：`1x3x512x512`
+- ONNX 输出：`output0=(1,37,5376)`、`output1=(1,32,128,128)`
+- ONNX 模型检查通过
+
+### 代码与日志
+
+- 新增 `build_iimages_yolov8_dataset.py`，支持递归读取 `images/raw_images`、负样本、标签归一化和四边形规范化。
+- 新增 `monitor_iimages_training.ps1`，用于每小时记录训练轮次、指标和 GPU 状态。
+- 新增中文训练日志：`log\2026-07-13_iimages_yolov8n_quad_v1.md`。
+
+---
+
 ## v7.0 (2026-06-22) - 轻量 Student 模型（YOLOv8n-seg，512 输入）
 
 ### 素材筛选：images（7）旧模型高置信精选
