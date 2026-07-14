@@ -4,6 +4,53 @@
 
 ---
 
+## v9.0 (2026-07-14) - IImages v2 迭代：New image 6 过采样融合
+
+### 训练数据
+
+| 项目 | 数量 |
+|---|---:|
+| 有效图片/JSON 配对 | 10,145 |
+| 训练集（含过采样） | 15,010 |
+| 验证集 | 1,939 |
+| 训练实例 | 12,515 |
+| 验证实例 | 1,646 |
+| 训练负样本 | 2,568 |
+| 验证负样本 | 295 |
+
+> 在 v1 基础上迭代，数据源为全量 `D:\Aiparking\IImages`，新增 `New image 6`（过采样 3 倍）和 `New image 5`（过采样 2 倍）。
+> `build_iimages_yolov8_dataset.py` 新增 `--oversample` 参数支持按目录关键词过采样，仅在 train split 生效。
+> 验证集按完整场景组 `New image 4\Ground_004` 隔离，seed=20260714。
+
+### 训练结果
+
+> 从 `models\best_yolov8n_iimages_quad_v1.pt` 微调，输入尺寸 512，batch 32，epochs 300 上限，patience 60。
+> 实际训练 61 epochs，EarlyStopping 触发，最佳模型来自第 1 轮，耗时 10.883 小时。
+> 注：微调默认 lr0=0.01 偏高，epoch 1 后指标持续小幅下降，建议后续微调降至 0.001。
+
+| 指标 | Box | Mask |
+|---|---:|---:|
+| Precision | 0.847 | 0.848 |
+| Recall | 0.998 | 0.999 |
+| mAP50 | 0.971 | 0.972 |
+| mAP50-95 | 0.855 | 0.838 |
+
+### 部署文件
+
+- `models\best_yolov8n_iimages_quad_v2.pt`，约 6.5 MB
+- `models\best_yolov8n_iimages_quad_v2_512.onnx`，约 12.6 MB
+- ONNX 输入：`1x3x512x512`
+- ONNX 输出：`output0=(1,37,5376)`、`output1=(1,32,128,128)`
+- 结构与 v1 完全一致，ONNX 检查通过
+
+### 代码与日志
+
+- `build_iimages_yolov8_dataset.py` 新增 `--oversample` 参数（按目录关键词对训练集样本过采样）。
+- 新增中文训练日志：`log\2026-07-14_iimages_yolov8n_quad_v2.md`。
+- 现有 19 个单元测试全部通过。
+
+---
+
 ## v8.0 (2026-07-13) - IImages 场景专用轻量 YOLOv8n-seg 模型
 
 ### 训练数据

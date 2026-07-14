@@ -273,6 +273,45 @@ def reset_output(output: Path, root: Path) -> None:
         shutil.rmtree(output)
 
 
+def parse_oversample(spec: str) -> dict[str, int]:
+    """Parse --oversample spec like 'New image 6:3,New image 5:2' into a map.
+
+    The key is a case-insensitive substring matched against the sample's
+    relative directory; the value is the total number of copies to keep
+    (1 means no oversampling, 2 means one extra copy, etc.).
+    """
+    mapping: dict[str, int] = {}
+    if not spec:
+        return mapping
+    for token in spec.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if ":" not in token:
+            raise ValueError(f"Invalid oversample entry (missing ':'): {token}")
+        key, _, value = token.partition(":")
+        key = key.strip()
+        try:
+            times = int(value.strip())
+        except ValueError as exc:
+            raise ValueError(f"Invalid oversample multiplier: {value}") from exc
+        if times < 1:
+            raise ValueError(f"Oversample multiplier must be >= 1, got {times}")
+        mapping[key] = times
+    return mapping
+
+
+def oversample_factor(sample: Sample, mapping: dict[str, int]) -> int:
+    """Return the number of copies to keep for this sample (1 if no match)."""
+    if not mapping:
+        return 1
+    haystack = sample.relative_dir
+    for key, times in mapping.items():
+        if key.lower() in haystack.lower():
+            return times
+    return 1
+
+
 def write_dataset(
     train: list[Sample],
     val: list[Sample],
@@ -281,9 +320,12 @@ def write_dataset(
     totals: Counter,
     min_confidence: float,
     seed: int,
+    oversample: dict[str, int] | None = None,
 ) -> dict:
     link_modes = Counter()
     instance_counts = Counter()
+    oversample = oversample or {}
+    oversample_stats: Counter = Counter()
 
     for split, items in (("train", train), ("val", val)):
         image_dir = output / "images" / split
@@ -291,13 +333,19 @@ def write_dataset(
         image_dir.mkdir(parents=True, exist_ok=True)
         label_dir.mkdir(parents=True, exist_ok=True)
         for sample in items:
+            copies = oversample_factor(sample, oversample) if split == "train" else 1
             relative_token = safe_token(sample.relative_dir.replace("\\", "__"))
-            stem = f"{relative_token}__{sample.image_path.stem}"
-            image_destination = image_dir / f"{stem}{sample.image_path.suffix.lower()}"
-            label_destination = label_dir / f"{stem}.txt"
-            link_modes[link_or_copy(sample.image_path, image_destination)] += 1
-            label_destination.write_text("\n".join(sample.label_lines), encoding="utf-8")
-            instance_counts[split] += sample.instances
+            base_stem = f"{relative_token}__{sample.image_path.stem}"
+            suffix = sample.image_path.suffix.lower()
+            for copy_index in range(copies):
+                stem = base_stem if copy_index == 0 else f"{base_stem}__os{copy_index}"
+                image_destination = image_dir / f"{stem}{suffix}"
+                label_destination = label_dir / f"{stem}.txt"
+                link_modes[link_or_copy(sample.image_path, image_destination)] += 1
+                label_destination.write_text("\n".join(sample.label_lines), encoding="utf-8")
+                instance_counts[split] += sample.instances
+            if copies > 1:
+                oversample_stats[f"oversampled:{sample.group}"] += copies - 1
 
     yaml_path = output / "parking_yolov8.yaml"
     yaml_path.write_text(
@@ -316,14 +364,18 @@ def write_dataset(
         "min_confidence": min_confidence,
         "seed": seed,
         "val_groups": val_groups,
-        "train_images": len(train),
+        "train_images": len(train) + sum(oversample_stats.values()),
         "val_images": len(val),
         "train_instances": instance_counts["train"],
         "val_instances": instance_counts["val"],
-        "train_negative_images": sum(item.is_negative for item in train),
+        "train_negative_images": sum(
+            oversample_factor(item, oversample) for item in train if item.is_negative
+        ),
         "val_negative_images": sum(item.is_negative for item in val),
         "link_modes": dict(link_modes),
         "annotation_stats": dict(totals),
+        "oversample": dict(oversample) if oversample else {},
+        "oversample_extra_copies": dict(oversample_stats),
     }
     (output / "build_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),
@@ -340,6 +392,17 @@ def main() -> None:
     parser.add_argument("--val-ratio", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=20260713)
     parser.add_argument("--exclude-empty", action="store_true")
+    parser.add_argument(
+        "--oversample",
+        default="",
+        help=(
+            "Oversample spec 'key:times[,key:times]'. The key is matched "
+            "case-insensitively against each sample's relative directory. "
+            "Example: 'New image 6:3,New image 5:2' keeps 3 copies of "
+            "New image 6 samples and 2 copies of New image 5 samples in "
+            "the train split only."
+        ),
+    )
     args = parser.parse_args()
 
     root = Path(args.data_root).resolve()
@@ -347,13 +410,17 @@ def main() -> None:
     if not root.exists():
         raise SystemExit(f"Data root does not exist: {root}")
 
+    oversample = parse_oversample(args.oversample)
+
     samples, totals = discover_samples(root, args.min_conf, not args.exclude_empty)
     if not samples:
         raise SystemExit("No usable image/JSON pairs found.")
 
     train, val, val_groups = split_by_group(samples, args.val_ratio, args.seed)
     reset_output(output, root)
-    summary = write_dataset(train, val, output, val_groups, totals, args.min_conf, args.seed)
+    summary = write_dataset(
+        train, val, output, val_groups, totals, args.min_conf, args.seed, oversample
+    )
 
     print("IImages dataset built")
     print(f"source: {root}")
